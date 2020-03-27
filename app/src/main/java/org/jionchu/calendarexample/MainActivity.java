@@ -1,8 +1,17 @@
 package org.jionchu.calendarexample;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import android.Manifest;
+import android.content.ContentUris;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.CalendarContract;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -20,14 +29,21 @@ import org.threeten.bp.LocalDate;
 import org.threeten.bp.YearMonth;
 import org.threeten.bp.temporal.WeekFields;
 
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
     private CalendarView mCalendarView;
     private CalendarDay mSelectedDay;
+    private ArrayList<Schedule> mDayScheduleList;
+    private HashMap<LocalDate,ArrayList<Schedule>> mMonthScheduleList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,6 +58,8 @@ public class MainActivity extends AppCompatActivity {
         YearMonth endMonth = currentMonth.plusMonths(10);
         DayOfWeek firstDayOfWeek = WeekFields.of(Locale.getDefault()).getFirstDayOfWeek();
         mSelectedDay = defaultSelected; // selected day 오늘 날짜로 초기화
+        mDayScheduleList = new ArrayList<>();
+        mMonthScheduleList = new HashMap<>();
 
         /* find view by id */
         mCalendarView = findViewById(R.id.main_calendar_view);
@@ -76,6 +94,21 @@ public class MainActivity extends AppCompatActivity {
                 // 현재 달에 해당하는 날짜들만 보이게 설정
                 if (calendarDay.getOwner() == DayOwner.THIS_MONTH) {
                     dayViewContainer.llCalendar.setVisibility(View.VISIBLE);
+                    // 구글 캘린더에 일정이 있는 경우 표시
+                    if (mMonthScheduleList.get(calendarDay.getDate())!=null) {
+                        dayViewContainer.ivSchedule.setVisibility(View.VISIBLE);
+                        if (mMonthScheduleList.get(calendarDay.getDate()).size()>2) {
+                            dayViewContainer.tvState.setText("바쁨");
+                            dayViewContainer.tvState.setTextColor(getResources().getColor(R.color.colorBusy));
+                        } else {
+                            dayViewContainer.tvState.setText("여유");
+                            dayViewContainer.tvState.setTextColor(getResources().getColor(R.color.colorComfort));
+                        }
+                    }
+                    else {
+                        dayViewContainer.ivSchedule.setVisibility(View.INVISIBLE);
+                        dayViewContainer.tvState.setText("");
+                    }
                 } else {
                     dayViewContainer.llCalendar.setVisibility(View.GONE);
                 }
@@ -86,6 +119,15 @@ public class MainActivity extends AppCompatActivity {
         mCalendarView.setDayBinder(dayBinder);
         mCalendarView.setup(startMonth, endMonth, firstDayOfWeek);
         mCalendarView.scrollToMonth(currentMonth);
+
+        // 이번 달 구글 캘린더 일정 가져오기
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+            readEvents(currentMonth.getYear(), currentMonth.getMonthValue());
+            for (LocalDate keyDate : mMonthScheduleList.keySet())
+                mCalendarView.notifyDateChanged(keyDate);
+        } else { // 권한 없는 경우 권한 요청하기
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_CALENDAR}, 1001);
+        }
 
     }
 
@@ -123,6 +165,63 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         }
+    }
+
+    void readEvents(int year, int month) {
+        final String[] INSTANCE_PROJECTION = new String[] {
+                CalendarContract.Instances.EVENT_ID,      // 0
+                CalendarContract.Instances.BEGIN,         // 1
+                CalendarContract.Instances.TITLE,          // 2
+                CalendarContract.Instances.ORGANIZER
+        };
+
+        // The indices for the projection array above.
+        final int PROJECTION_ID_INDEX = 0;
+        final int PROJECTION_BEGIN_INDEX = 1;
+        final int PROJECTION_TITLE_INDEX = 2;
+        final int PROJECTION_ORGANIZER_INDEX = 3;
+
+        // Specify the date range you want to search for recurring event instances
+        Calendar beginTime = Calendar.getInstance();
+        beginTime.set(year, month-1, 1, 8, 0);
+        long startMillis = beginTime.getTimeInMillis();
+        Calendar endTime = Calendar.getInstance();
+        endTime.set(year, month-1, 31, 8, 0);
+        long endMillis = endTime.getTimeInMillis();
+
+        // Construct the query with the desired date range.
+        Uri.Builder builder = CalendarContract.Instances.CONTENT_URI.buildUpon();
+        ContentUris.appendId(builder, startMillis);
+        ContentUris.appendId(builder, endMillis);
+
+        // Submit the query
+        Cursor cur =  this.getContentResolver().query(builder.build(), INSTANCE_PROJECTION, null, null, null);
+
+        mMonthScheduleList.clear();
+
+        while (cur.moveToNext()) {
+
+            // Get the field values
+            long eventID = cur.getLong(PROJECTION_ID_INDEX);
+            long beginVal = cur.getLong(PROJECTION_BEGIN_INDEX);
+            String title = cur.getString(PROJECTION_TITLE_INDEX);
+            String organizer = cur.getString(PROJECTION_ORGANIZER_INDEX);
+
+            // Do something with the values.
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTimeInMillis(beginVal);
+            DateFormat timeFormat = new SimpleDateFormat("HH:mm");
+
+            LocalDate date = LocalDate.of(calendar.getTime().getYear()+1900,calendar.getTime().getMonth()+1,calendar.getTime().getDate());
+            ArrayList<Schedule> schedules = mMonthScheduleList.get(date);
+            if (schedules == null)
+                schedules = new ArrayList<>();
+            schedules.add(new Schedule(title,timeFormat.format(calendar.getTime())));
+            Collections.sort(schedules);
+            mMonthScheduleList.put(date,schedules);
+
+        }
+
     }
 
 }
