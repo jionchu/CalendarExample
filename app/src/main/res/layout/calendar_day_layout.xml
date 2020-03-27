@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:id="@+id/calendar_ll"
+    android:gravity="center">
+
+    <ImageView
+        android:id="@+id/calendar_iv_schedule"
+        android:layout_width="5dp"
+        android:layout_height="5dp"
+        android:background="@drawable/ic_calendar_dot"/>
+
+    <TextView
+        android:id="@+id/calendar_tv_day"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="28"
+        android:textColor="@color/colorText"
+        android:textSize="16sp"/>
+
+    <TextView
+        android:id="@+id/calendar_tv_state"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        tools:text="바쁨"
+        android:textStyle="bold"/>
+
+</LinearLayout>
